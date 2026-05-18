@@ -12,19 +12,39 @@
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background-color: #34495e; color: white; border-radius: 4px 4px 0 0; }
         tr:nth-child(even) { background-color: #f9f9f9; }
-        tr:first-child td { background-color: #ffeaa7; font-weight: bold; } /* Лидер */
+        tr:first-child td { background-color: #ffeaa7; font-weight: bold; } 
+        
+        /* Стили для кликабельного имени */
+        .clickable-name { color: #3498db; cursor: pointer; text-decoration: underline; font-weight: 500; }
+        .clickable-name:hover { color: #2980b9; }
+
         .form-group { margin-top: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
         input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
         button { width: 100%; padding: 12px; background: #2ecc71; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 20px; font-weight: bold; }
         button:hover { background: #27ae60; }
         .admin-section { margin-top: 30px; border-top: 2px dashed #ccc; padding-top: 20px; }
+
+        /* СТИЛИ ДЛЯ ВСПЛЫВАЮЩЕГО ОКНА (МОДАЛКИ) */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: white; margin: 15% auto; padding: 20px; border-radius: 10px; width: 80%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; animation: fadeIn 0.3s; }
+        .close-btn { position: absolute; right: 15px; top: 10px; font-size: 24px; cursor: pointer; color: #95a5a6; }
+        .close-btn:hover { color: #333; }
+        .modal-title { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .detail-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #eee; }
+        .detail-item:last-child { border-bottom: none; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>🏆 Лидеры за сегодня</h2>
+    <p style="text-align: center; font-size: 12px; color: #7f8c8d; margin-top: -10px;">(Нажмите на имя, чтобы посмотреть детали)</p>
     <table id="leaderboard">
         <thead>
             <tr>
@@ -50,18 +70,28 @@
         <button type="submit">Отправить результат</button>
     </form>
 
-    <!-- ПАНЕЛЬ АДМИНИСТРАТОРА ПРЯМО НА САЙТЕ -->
     <div class="admin-section">
         <h3>⚙️ Настройки (Админ)</h3>
         <div class="form-group">
             <label>Участники (через запятую):</label>
-            <input type="text" id="usersConfig" value="Андрей, Сергей, Алексей">
+            <input type="text" id="usersConfig" value="Светлана, Андрей Х, Андрей М">
         </div>
         <div class="form-group">
             <label>Задачи (через запятую):</label>
-            <input type="text" id="tasksConfig" value="Задача 1, Задача 2, Задача 3, Задача 4, Задача 5">
+            <input type="text" id="tasksConfig" value="Tango, Queens, Zip,  Sudoku, Patches">
         </div>
         <button type="button" onclick="saveConfig()" style="background:#3498db;">Обновить списки</button>
+    </div>
+</div>
+
+<!-- ВСПЛЫВАЮЩЕГО ОКНО ДЛЯ ДЕТАЛИЗАЦИИ -->
+<div id="detailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h3 class="modal-title" id="modalUserName">Участник</h3>
+        <div id="modalDetailsBody">
+            <!-- Сюда скрипт подставит задачи и секунды -->
+        </div>
     </div>
 </div>
 
@@ -69,19 +99,19 @@
     // ВСТАВЬ СВОЮ ССЫЛКУ ИЗ GOOGLE МЕЖДУ КАВЫЧКАМИ:
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwNRsULrBa5gOCEOVCmTa_Y1MijToD4Np6gp5pBcs15kBsaVw6zWnPDhRPii511d40D/exec"; 
 
-    // Загрузка настроек из памяти браузера (чтобы можно было легко менять)
-    let users = localStorage.getItem('users') ? localStorage.getItem('users').split(',') : ["Андрей", "Сергей", "Алексей"];
-    let tasks = localStorage.getItem('tasks') ? localStorage.getItem('tasks').split(',') : ["Задача 1", "Задача 2", "Задача 3", "Задача 4", "Задача 5"];
+    let users = localStorage.getItem('users') ? localStorage.getItem('users').split(',') : ["Светлана", "Андрей Х", "Андрей М"];
+    let tasks = localStorage.getItem('tasks') ? localStorage.getItem('tasks').split(',') : ["Tango", "Queens", "Zip", "Sudoku", "Patches"];
+    
+    // Хранилище для данных за сегодня, чтобы открывать модалку без повторных запросов в сеть
+    let currentTodayData = [];
 
     function initSite() {
-        // Заполняем выпадающий список пользователей
         const select = document.getElementById('userSelect');
         select.innerHTML = users.map(u => `<option value="${u.trim()}">${u.trim()}</option>`).join('');
         
         document.getElementById('usersConfig').value = users.join(', ');
         document.getElementById('tasksConfig').value = tasks.join(', ');
 
-        // Генерируем поля для задач
         const container = document.getElementById('tasksInputContainer');
         container.innerHTML = tasks.map((t, index) => `
             <div class="form-group">
@@ -100,29 +130,26 @@
         location.reload();
     }
 
-    // Загрузка топа из Google Таблицы
     async function loadLeaderboard() {
         try {
             const todayStr = new Date().toLocaleDateString("ru-RU");
             const response = await fetch(WEB_APP_URL);
             const data = await response.json();
             
-            // Фильтруем только за сегодня
-            const todayData = data.filter(item => item.date.includes(todayStr) || new Date(item.date).toLocaleDateString("ru-RU") === todayStr);
-            
-            // Сортируем от лучшего к худшему (по возрастанию секунд)
-            todayData.sort((a, b) => a.total - b.total);
+            // Фильтруем за сегодня
+            currentTodayData = data.filter(item => item.date.includes(todayStr) || new Date(item.date).toLocaleDateString("ru-RU") === todayStr);
+            currentTodayData.sort((a, b) => a.total - b.total);
 
             const tbody = document.querySelector('#leaderboard tbody');
-            if(todayData.length === 0) {
+            if(currentTodayData.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;">Сегодня еще никто не вносил результаты</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = todayData.map((item, idx) => `
+            tbody.innerHTML = currentTodayData.map((item, idx) => `
                 <tr>
                     <td>${idx + 1}</td>
-                    <td>${item.name}</td>
+                    <td><span class="clickable-name" onclick="showDetails('${item.name}')">${item.name}</span></td>
                     <td>${item.total} сек</td>
                 </tr>
             `).join('');
@@ -131,7 +158,41 @@
         }
     }
 
-    // Отправка формы
+    // ФУНКЦИЯ ОТКРЫТИЯ ОКНА С ДЕТАЛЯМИ
+    function showDetails(name) {
+        // Ищем в сохраненных данных за сегодня запись этого пользователя
+        const userRecord = currentTodayData.find(item => item.name === name);
+        if (!userRecord) return;
+
+        document.getElementById('modalUserName').innerText = `Результаты: ${name}`;
+        
+        // Массив значений времени
+        const times = [userRecord.t1, userRecord.t2, userRecord.t3, userRecord.t4, userRecord.t5];
+        
+        // Формируем список задач динамически на основе названий из админки
+        const detailsHtml = tasks.map((taskName, idx) => `
+            <div class="detail-item">
+                <span><strong>${taskName.trim()}:</strong></span>
+                <span>${times[idx] || 0} сек</span>
+            </div>
+        `).join('');
+
+        document.getElementById('modalDetailsBody').innerHTML = detailsHtml;
+        document.getElementById('detailsModal').style.display = "block";
+    }
+
+    function closeModal() {
+        document.getElementById('detailsModal').style.display = "none";
+    }
+
+    // Закрытие модалки при клике вне её области
+    window.onclick = function(event) {
+        const modal = document.getElementById('detailsModal');
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+
     document.getElementById('timeForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
