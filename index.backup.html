@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Топ Участников</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #eef2f3; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #2c3e50; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #34495e; color: white; border-radius: 4px 4px 0 0; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:first-child td { background-color: #ffeaa7; font-weight: bold; } 
+        
+        /* Стили для кликабельного имени */
+        .clickable-name { color: #3498db; cursor: pointer; text-decoration: underline; font-weight: 500; }
+        .clickable-name:hover { color: #2980b9; }
+
+        .form-group { margin-top: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #2ecc71; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 20px; font-weight: bold; }
+        button:hover { background: #27ae60; }
+        .admin-section { margin-top: 30px; border-top: 2px dashed #ccc; padding-top: 20px; }
+
+        /* СТИЛИ ДЛЯ ВСПЛЫВАЮЩЕГО ОКНА (МОДАЛКИ) */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: white; margin: 15% auto; padding: 20px; border-radius: 10px; width: 80%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; animation: fadeIn 0.3s; }
+        .close-btn { position: absolute; right: 15px; top: 10px; font-size: 24px; cursor: pointer; color: #95a5a6; }
+        .close-btn:hover { color: #333; }
+        .modal-title { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .detail-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #eee; }
+        .detail-item:last-child { border-bottom: none; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🏆 Лидеры за сегодня</h2>
+    <p style="text-align: center; font-size: 12px; color: #7f8c8d; margin-top: -10px;">(Нажмите на имя, чтобы посмотреть детали)</p>
+    <table id="leaderboard">
+        <thead>
+            <tr>
+                <th>Место</th>
+                <th>Имя</th>
+                <th>Время (сек)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td colspan="3" style="text-align:center;">Загрузка данных...</td></tr>
+        </tbody>
+    </table>
+
+    <h2 style="margin-top: 40px;">⏱ Внести время</h2>
+    <form id="timeForm">
+        <div class="form-group">
+            <label>Выберите участника:</label>
+            <select id="userSelect" required></select>
+        </div>
+
+        <div id="tasksInputContainer"></div>
+
+        <button type="submit">Отправить результат</button>
+    </form>
+
+    <div class="admin-section">
+        <h3>⚙️ Настройки (Админ)</h3>
+        <div class="form-group">
+            <label>Участники (через запятую):</label>
+            <input type="text" id="usersConfig" value="Светлана, Андрей Х, Андрей М">
+        </div>
+        <div class="form-group">
+            <label>Задачи (через запятую):</label>
+            <input type="text" id="tasksConfig" value="Tango, Queens, Zip,  Sudoku, Patches">
+        </div>
+        <button type="button" onclick="saveConfig()" style="background:#3498db;">Обновить списки</button>
+    </div>
+</div>
+
+<!-- ВСПЛЫВАЮЩЕГО ОКНО ДЛЯ ДЕТАЛИЗАЦИИ -->
+<div id="detailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h3 class="modal-title" id="modalUserName">Участник</h3>
+        <div id="modalDetailsBody">
+            <!-- Сюда скрипт подставит задачи и секунды -->
+        </div>
+    </div>
+</div>
+
+<script>
+    // ВСТАВЬ СВОЮ ССЫЛКУ ИЗ GOOGLE МЕЖДУ КАВЫЧКАМИ:
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwNRsULrBa5gOCEOVCmTa_Y1MijToD4Np6gp5pBcs15kBsaVw6zWnPDhRPii511d40D/exec"; 
+
+    let users = localStorage.getItem('users') ? localStorage.getItem('users').split(',') : ["Светлана", "Андрей Х", "Андрей М"];
+    let tasks = localStorage.getItem('tasks') ? localStorage.getItem('tasks').split(',') : ["Tango", "Queens", "Zip", "Sudoku", "Patches"];
+    
+    // Хранилище для данных за сегодня, чтобы открывать модалку без повторных запросов в сеть
+    let currentTodayData = [];
+
+    function initSite() {
+        const select = document.getElementById('userSelect');
+        select.innerHTML = users.map(u => `<option value="${u.trim()}">${u.trim()}</option>`).join('');
+        
+        document.getElementById('usersConfig').value = users.join(', ');
+        document.getElementById('tasksConfig').value = tasks.join(', ');
+
+        const container = document.getElementById('tasksInputContainer');
+        container.innerHTML = tasks.map((t, index) => `
+            <div class="form-group">
+                <label>${t.trim()} (секунд):</label>
+                <input type="number" class="task-input" data-index="${index+1}" required min="0">
+            </div>
+        `).join('');
+        
+        loadLeaderboard();
+    }
+
+    function saveConfig() {
+        localStorage.setItem('users', document.getElementById('usersConfig').value);
+        localStorage.setItem('tasks', document.getElementById('tasksConfig').value);
+        alert('Списки обновлены!');
+        location.reload();
+    }
+
+    async function loadLeaderboard() {
+        try {
+            const todayStr = new Date().toLocaleDateString("ru-RU");
+            const response = await fetch(WEB_APP_URL);
+            const data = await response.json();
+            
+            // Фильтруем за сегодня
+            currentTodayData = data.filter(item => item.date.includes(todayStr) || new Date(item.date).toLocaleDateString("ru-RU") === todayStr);
+            currentTodayData.sort((a, b) => a.total - b.total);
+
+            const tbody = document.querySelector('#leaderboard tbody');
+            if(currentTodayData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;">Сегодня еще никто не вносил результаты</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = currentTodayData.map((item, idx) => `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td><span class="clickable-name" onclick="showDetails('${item.name}')">${item.name}</span></td>
+                    <td>${item.total} сек</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            document.querySelector('#leaderboard tbody').innerHTML = `<tr><td colspan="3" style="text-align:center;color:red;">Ошибка обновления данных</td></tr>`;
+        }
+    }
+
+    // ФУНКЦИЯ ОТКРЫТИЯ ОКНА С ДЕТАЛЯМИ
+    function showDetails(name) {
+        // Ищем в сохраненных данных за сегодня запись этого пользователя
+        const userRecord = currentTodayData.find(item => item.name === name);
+        if (!userRecord) return;
+
+        document.getElementById('modalUserName').innerText = `Результаты: ${name}`;
+        
+        // Массив значений времени
+        const times = [userRecord.t1, userRecord.t2, userRecord.t3, userRecord.t4, userRecord.t5];
+        
+        // Формируем список задач динамически на основе названий из админки
+        const detailsHtml = tasks.map((taskName, idx) => `
+            <div class="detail-item">
+                <span><strong>${taskName.trim()}:</strong></span>
+                <span>${times[idx] || 0} сек</span>
+            </div>
+        `).join('');
+
+        document.getElementById('modalDetailsBody').innerHTML = detailsHtml;
+        document.getElementById('detailsModal').style.display = "block";
+    }
+
+    function closeModal() {
+        document.getElementById('detailsModal').style.display = "none";
+    }
+
+    // Закрытие модалки при клике вне её области
+    window.onclick = function(event) {
+        const modal = document.getElementById('detailsModal');
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+
+    document.getElementById('timeForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const payload = {
+            name: document.getElementById('userSelect').value,
+            t1: document.querySelector('[data-index="1"]')?.value || 0,
+            t2: document.querySelector('[data-index="2"]')?.value || 0,
+            t3: document.querySelector('[data-index="3"]')?.value || 0,
+            t4: document.querySelector('[data-index="4"]')?.value || 0,
+            t5: document.querySelector('[data-index="5"]')?.value || 0,
+        };
+
+        document.querySelector('#timeForm button').innerText = "Отправка...";
+
+        try {
+            await fetch(WEB_APP_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                cache: 'no-cache',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            alert('Успешно отправлено!');
+            document.getElementById('timeForm').reset();
+            setTimeout(loadLeaderboard, 1500);
+        } catch(err) {
+            alert('Ошибка при отправке');
+        } finally {
+            document.querySelector('#timeForm button').innerText = "Отправить результат";
+        }
+    });
+
+    initSite();
+</script>
+</body>
+</html>
